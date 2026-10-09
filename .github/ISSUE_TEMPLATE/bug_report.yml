@@ -1,0 +1,47 @@
+name: Bug report
+description: A buddy bunker doesn't open with one press, or the mod doesn't work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the report! Please attach SoloBuddyBunkers.log and BingusSharedLoader.log (in %LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs). SoloBuddyBunkers.log shows whether it found what it needs in the game's code, and each bunker press it made or left alone and why.
+  - type: input
+    id: version
+    attributes:
+      label: Mod version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: game_type
+    attributes:
+      label: Your game
+      options:
+        - Solo
+        - Hosting (others joined my game)
+        - Joined someone else's game
+    validations:
+      required: true
+  - type: input
+    id: options
+    attributes:
+      label: Options
+      description: Is "Open buddy bunkers alone" on in Mod Options Menu (if you use it)?
+  - type: input
+    id: game
+    attributes:
+      label: Game version / date of the last game update
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected and what happened instead, and about when (the log has times).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Drag SoloBuddyBunkers.log and BingusSharedLoader.log here.
