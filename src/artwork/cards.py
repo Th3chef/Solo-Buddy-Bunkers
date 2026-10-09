@@ -1,5 +1,6 @@
-"""Solo Buddy Bunkers release art: thumbnail (1254x1254), gallery photo (1920x1080), header (1300x372) and the GitHub
-social preview (1280x640). The scene comes from hero.py (a flat illustration); the title, version badge and text are HTML rendered with Playwright
+"""Solo Buddy Bunkers release art: thumbnail (1254x1254), gallery photo (1920x1080), header (1300x372), the GitHub
+social preview (1280x640) and the AyakaMods cover (1600x1000: the site's mod cards crop the cover to a 200 px high box
+from about 1.2:1 to 2:1 wide, so the title and the bunker sit in the middle 1190x800). The scene comes from hero.py (a flat illustration); the title, version badge and text are HTML rendered with Playwright
 Chromium (Anton + Barlow Condensed in fonts/, SIL Open Font License, from @fontsource).
 python cards.py <out dir> [version badge, e.g. 1.0]"""
 import base64, io, os, sys
@@ -115,6 +116,14 @@ def main():
           <span class="badge" style="font-size:32px;margin-top:6px">v%(v)s</span></div>
         <div style="margin-top:16px"><span class="band" style="font-size:24px">%(t)s</span></div>
       </div>""" % {'v': ver, 't': TAGLINE}))
+    # AyakaMods cover 1.6:1: everything that matters inside the middle 1190x800 (the mod cards crop it to 1.2:1 .. 2:1)
+    W, H = 1600, 1000
+    bg = hero.hero(W, H, 800, 670, 420, seed=13, arc=0.8)
+    jobs.append(('AyakaMods-Cover-1600x1000.png', W, H, bg, """
+      <div class="stripe" style="top:0;height:24px"></div><div class="stripe" style="bottom:0;height:24px"></div>
+      <div style="position:absolute;left:0;right:0;top:118px;display:flex;justify-content:center;align-items:flex-start;gap:22px">
+        <div class="title" style="font-size:112px;white-space:nowrap">Solo Buddy Bunkers</div>
+        <span class="badge" style="font-size:42px;margin-top:8px">v%(v)s</span></div>""" % {'v': ver}))
     with sync_playwright() as p:
         b = p.chromium.launch()
         page = b.new_page()
