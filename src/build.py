@@ -5,7 +5,7 @@ python build.py <out dir> --tester     the release's Tester build (research deta
 python build.py <out dir> --test N     numbered test build N (log in Logs\\test, test GUID)
   (add --recorder: presses nothing, records every switch change)
   - 9ba626afa44a3aa3.patch_0: the addon (plain Lua, Bingus Shared Loader finds it by its first line)
-  - manifest.json, icon.png (the release art from artwork/thumbnail.png; test builds draw a simple TEST icon); zip
+  - manifest.json, icon.png (the Arsenal icon from artwork/icon.png; test builds draw a simple TEST icon); zip
 """
 import json, os, shutil, struct, sys, zipfile
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -104,7 +104,7 @@ def main():
     if test:
         icon('TEST %d' % test).save(os.path.join(pkg, 'icon.png'), optimize=True)
     else:   # the release art, 512x512 (Arsenal shows it small)
-        Image.open(os.path.join(HERE, 'artwork', 'thumbnail.png')).convert('RGB').resize((512, 512), Image.LANCZOS).save(
+        Image.open(os.path.join(HERE, 'artwork', 'icon.png')).convert('RGB').resize((512, 512), Image.LANCZOS).save(
             os.path.join(pkg, 'icon.png'), optimize=True)
     man = {'Version': 1, 'Guid': guid, 'Name': 'Solo Buddy Bunkers ' + full,
            'Description': 'Open two-person (buddy) bunkers by yourself: when you press one of the two switches, the '

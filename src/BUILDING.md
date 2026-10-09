@@ -10,12 +10,12 @@ A Bingus Shared Loader Lua mod: one addon, `lua/solo_buddy_bunkers.lua`.
     patch_writer.py writes the patch archive
     fonts/          Anton (SIL Open Font License), for the icon of numbered test builds
     artwork/        the release art:
-                      scene.py        the 3D scene (Blender as a Python module: pip install bpy), rendered with
-                                      Cycles by render_all.sh into renders/ (square, wide, social, header; about
-                                      an hour on 2 CPU cores)
-                      cards.py        the thumbnail, gallery, header and GitHub social picture from the renders
-                                      (python3 cards.py <out dir> 1.0; needs Playwright Chromium)
-                      thumbnail.png   the Arsenal icon build.py uses; fonts/ (SIL Open Font License)
+                      hero.py         the scene, a flat illustration (Python 3 + NumPy, SciPy, Pillow)
+                      cards.py        the thumbnail, gallery, header and GitHub social picture: the scene from
+                                      hero.py with the title and text as HTML rendered with Playwright Chromium
+                                      (python3 cards.py <out dir> 1.0)
+                      thumbnail.png   the page art (square); fonts/ (SIL Open Font License)
+                      icon.png        the Arsenal icon build.py puts in the zip (the 1.0.0 art)
 
 Run them from this folder. The release build is deterministic apart from the zip's file dates: the files inside match
 the release byte for byte.
