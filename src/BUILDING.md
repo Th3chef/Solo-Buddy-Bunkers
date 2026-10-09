@@ -11,7 +11,7 @@ A Bingus Shared Loader Lua mod: one addon, `lua/solo_buddy_bunkers.lua`.
     fonts/          Anton (SIL Open Font License), for the icon of numbered test builds
     artwork/        the release art:
                       hero.py         the scene, a flat illustration (Python 3 + NumPy, SciPy, Pillow)
-                      cards.py        the thumbnail, gallery, header and GitHub social picture: the scene from
+                      cards.py        the thumbnail, gallery, header, GitHub social picture and AyakaMods cover: the scene from
                                       hero.py with the title and text as HTML rendered with Playwright Chromium
                                       (python3 cards.py <out dir> 1.0)
                       thumbnail.png   the page art (square); fonts/ (SIL Open Font License)
