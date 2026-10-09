@@ -1,10 +1,10 @@
 """Solo Buddy Bunkers release art: thumbnail (1254x1254), gallery photo (1920x1080), header (1300x372) and the GitHub
-social preview (1280x640). The scene is the 3D render from scene.py (renders/, made by render_all.sh); the title, version badge and text are HTML rendered with Playwright
+social preview (1280x640). The scene comes from hero.py (a flat illustration); the title, version badge and text are HTML rendered with Playwright
 Chromium (Anton + Barlow Condensed in fonts/, SIL Open Font License, from @fontsource).
 python cards.py <out dir> [version badge, e.g. 1.0]"""
 import base64, io, os, sys
 from playwright.sync_api import sync_playwright
-from PIL import Image
+import hero
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONTS = {'Anton': 'fonts/anton-latin-400-normal.woff2',
@@ -72,7 +72,7 @@ def main():
     jobs = []
     # square thumbnail: the title at the top, the bunker in the middle, the tagline at the bottom
     W = H = 1254
-    bg = Image.open(os.path.join(HERE, 'renders', 'square.png'))
+    bg = hero.hero(W, H, 627, 740, 460, seed=7, arc=0.8)
     jobs.append(('thumbnail.png', W, H, bg, """
       <div class="stripe" style="top:0;height:26px"></div><div class="stripe" style="bottom:0;height:26px"></div>
       <div style="position:absolute;left:0;right:0;top:66px;text-align:center">
@@ -86,7 +86,7 @@ def main():
       </div>""" % {'v': ver, 't': TAGLINE}))
     # gallery photo 16:9: the bunker on the right, the text on the left
     W, H = 1920, 1080
-    bg = Image.open(os.path.join(HERE, 'renders', 'wide.png'))
+    bg = hero.hero(W, H, 1296, 560, 490, seed=11, arc=0.8)
     jobs.append(('gallery_1920x1080.png', W, H, bg, """
       <div class="stripe" style="top:0;height:24px"></div><div class="stripe" style="bottom:0;height:24px"></div>
       <div class="plate" style="left:70px;top:150px;width:600px;padding:44px 40px 46px">
@@ -97,7 +97,7 @@ def main():
       </div>""" % {'v': ver, 't': TAGLINE, 'f': feats(30)}))
     # GitHub social preview 2:1 (40 px clear at the edges)
     W, H = 1280, 640
-    bg = Image.open(os.path.join(HERE, 'renders', 'social.png'))
+    bg = hero.hero(W, H, 905, 335, 265, seed=5, arc=0.8)
     jobs.append(('GitHub-Social-1280x640.png', W, H, bg, """
       <div class="plate" style="left:48px;top:62px;width:450px;padding:30px 30px 32px">
         <div class="title" style="font-size:80px">Solo Buddy<br>Bunkers</div>
@@ -107,7 +107,7 @@ def main():
       </div>""" % {'v': ver, 't': TAGLINE, 'f': feats(21)}))
     # header 1300x372: the title on the left, the bunker on the right
     W, H = 1300, 372
-    bg = Image.open(os.path.join(HERE, 'renders', 'header.png'))
+    bg = hero.hero(W, H, 1070, 190, 165, seed=9, arc=0.8)
     jobs.append(('header_1300x372.png', W, H, bg, """
       <div class="stripe" style="top:0;height:14px"></div><div class="stripe" style="bottom:0;height:14px"></div>
       <div class="plate" style="left:44px;top:58px;width:830px;padding:30px 36px 34px">
