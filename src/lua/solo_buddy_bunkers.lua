@@ -8,10 +8,9 @@
 --     your own press goes through.
 -- Finds everything it needs in the game's code by itself (no fixed addresses), so a game update doesn't break it;
 -- if something can't be found, it stays off and says why in its log.
-local VERSION = '1.0.0'
+local VERSION = '1.0.1'
 local TESTER = false          -- Tester and numbered test builds: research details in the log
 local TEST_BUILD = false      -- numbered test builds only: the log goes to Logs\test
-local RECORDER = false        -- recorder test builds: press nothing, record every switch change (record log)
 
 if rawget(_G, 'ChefSoloBuddyBunkers') then return end
 local SB = { version = VERSION, status = 'starting' }
@@ -208,14 +207,14 @@ local P = {
   press = '89 54 24 10 53 48 83 EC 20 48 8B 01 4C 8D 44 24 38 48 8B D9 C7 44 24 38 00 00 00 00 BA 54 2F 78 CD 8B 48 0C'
        .. ' E8 ?? ?? ?? ?? 84 C0 74 12 48 8B 03 45 33 C0 8B 54 24 38 8B 48 0C E8 ?? ?? ?? ?? BA AD 9C A3 85 48 8B CB'
        .. ' E8 ?? ?? ?? ?? BA 04 00 00 00 48 8B CB 48 83 C4 20 5B E9 ?? ?? ?? ??',
-  -- the behaviour update: switch (behaviour - 1) over a jump table
+  -- the behavior update: switch (behavior - 1) over a jump table
   dispatch = 'FF CA 48 8B F9 81 FA ?? ?? ?? ?? 0F 87 ?? ?? ?? ?? 49 89 5B 10 4C 8D 05 ?? ?? ?? ?? 49 89 73 20 48 63 C2'
           .. ' 41 0F 29 73 D8 41 8B 84 80 ?? ?? ?? ??',
   -- a switch's case: still pressed (state 4) and the window ran out (press time + window <= the game clock)? then
   -- 'timed out' (state 5) through the switch's state setter
   case = '48 8B 49 08 83 39 04 0F 85 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 8B 89 ?? ?? ?? ?? 48 81 C1 ?? ?? ?? ?? 48 3B 48 18'
       .. ' 0F 87 ?? ?? ?? ?? 48 8B CF E8 ?? ?? ?? ?? BA 05 00 00 00 48 8B CF E8 ?? ?? ?? ??',
-  -- adding a behaviour record: count +0x2c, records +0x60 (stride 0x1F8), entities +0x58, index map +0x40
+  -- adding a behavior record: count +0x2c, records +0x60 (stride 0x1F8), entities +0x58, index map +0x40
   records = '48 8B 3D ?? ?? ?? ?? 48 8B E9 8B 77 2C 3B 77 48 72 0B 48 8B CF E8 ?? ?? ?? ?? 8B 77 2C 3B 77 20 72 0B'
          .. ' 48 8B CF E8 ?? ?? ?? ?? 8B 77 2C 8B DE 33 D2 48 69 CB F8 01 00 00 41 B8 F8 01 00 00 48 03 4F 60'
          .. ' E8 ?? ?? ?? ?? 48 8D 0C 9B 33 D2 48 C1 E1 05 41 B8 A0 00 00 00 48 03 4F 68 E8 ?? ?? ?? ?? 48 8B 47 58',
@@ -228,14 +227,15 @@ local P = {
 local KNOWN = { press_right = 0x250410, press_left = 0x250C70, records = 0x3326740, clock = 0x3326348, units = 0x1A100F0,
                 right = 149, left = 150, window_us = 5000000 }
 
--- everything the mod needs, from the places the patterns matched (`sites`, offsets in the code sections). `rg`/`re`
--- read bytes of game.dll's / the exe's code: from the whole code text (first look) or from memory (cached places).
--- `behs`: the switch behaviours to check (nil: try every case of the behaviour update).
-local function derive(G, E, sites, rg, re, behs)
+-- everything the solo/host part needs, from the places the patterns matched (`sites`, offsets in game.dll's code
+-- section). `rg` reads bytes of game.dll's code: from the whole code text (first look) or from memory (cached places).
+-- `behs`: the switch behaviors to check (nil: try every case of the behavior update).
+-- ((1.0.1 review) the units (helldivers2.exe) are no longer part of this: they are their own step, see resolve_units)
+local function derive(G, sites, rg, behs)
   local crva = G.code.rva
   local function sub(r, o, n) local t = r(o, n); return t and #t == n and t or nil end
   local function pat_len(p) local _, _, n = compile(p); return n end
-  local L = { game = G.base, exe = E.base, switches = {} }
+  local L = { game = G.base, switches = {} }
   -- 1. the two switch 'pressed' routines and the state setter each one ends in
   local by_setter, npress = {}, pat_len(P.press)
   for _, o in ipairs(sites.press) do
@@ -243,14 +243,14 @@ local function derive(G, E, sites, rg, re, behs)
     if not t or not match_at(t, 0, P.press) then error('switch routine changed', 0) end
     by_setter[crva + o + npress + si32(t, npress - 4)] = crva + o
   end
-  -- 2. the behaviour update's jump table: which behaviours are switches (their case calls one of those setters)
+  -- 2. the behavior update's jump table: which behaviors are switches (their case calls one of those setters)
   local d = sites.dispatch
   local t = sub(rg, d, pat_len(P.dispatch))
-  if not t or not match_at(t, 0, P.dispatch) then error('behaviour update changed', 0) end
+  if not t or not match_at(t, 0, P.dispatch) then error('behavior update changed', 0) end
   local max = su32(t, 7)
-  if si32(t, 24) + crva + d + 28 ~= 0 then error('behaviour update: unexpected table base', 0) end
+  if si32(t, 24) + crva + d + 28 ~= 0 then error('behavior update: unexpected table base', 0) end
   local table_rva = su32(t, 44)
-  if max > 4096 or table_rva < crva or table_rva + 4 * (max + 1) > crva + G.code.size then error('behaviour update: table out of range', 0) end
+  if max > 4096 or table_rva < crva or table_rva + 4 * (max + 1) > crva + G.code.size then error('behavior update: table out of range', 0) end
   local list = behs
   if not list then list = {}; for b = 1, max + 1 do list[#list + 1] = b end end
   local clock, window, stoff
@@ -269,17 +269,13 @@ local function derive(G, E, sites, rg, re, behs)
   end
   local n = 0
   for _ in pairs(L.switches) do n = n + 1 end
-  if n ~= 2 then error('switch behaviours: found ' .. n .. ' (expected 2)', 0) end
+  if n ~= 2 then error('switch behaviors: found ' .. n .. ' (expected 2)', 0) end
   L.clock, L.window_us, L.press_time = L.game + clock, window, 8 + stoff
-  -- 3. the behaviour records
+  -- 3. the behavior records
   local rt = sub(rg, sites.records, pat_len(P.records))
-  if not rt or not match_at(rt, 0, P.records) then error('behaviour records changed', 0) end
+  if not rt or not match_at(rt, 0, P.records) then error('behavior records changed', 0) end
   L.records = L.game + crva + sites.records + 7 + si32(rt, 3)
   L.stride = su32(rt, 52)
-  -- 4. units (in helldivers2.exe)
-  local ut = sub(re, sites.units, pat_len(P.units))
-  if not ut or not match_at(ut, 0, P.units) then error('units changed', 0) end
-  L.units = L.exe + E.code.rva + sites.units + 7 + si32(ut, 3)
   -- names: the right switch's routine comes first in the code (as in the September 2026 build; only used in the log)
   local right, left
   for beh, sw in pairs(L.switches) do if not right or sw.rva < L.switches[right].rva then right = beh end end
@@ -289,11 +285,22 @@ local function derive(G, E, sites, rg, re, behs)
   return L
 end
 
--- cache: the places found, for this game build (looked at again, byte for byte, on every start)
-local CACHE = LOGDIR and (LOGDIR .. '\\SoloBuddyBunkers.cache') or nil
-local function cache_load()
+-- the game's two modules and the key of this game build (the caches below are only used for the same key)
+local function game_modules()
+  local gmod, emod = K32.SbGetModuleHandleA('game.dll'), K32.SbGetModuleHandleA(nil)
+  if gmod == nil or emod == nil then error('game modules not loaded', 0) end
+  local G, E = module_info(gmod), module_info(emod)
+  if not (G.code and E.code) then error('no code section', 0) end
+  return G, E, string.format('%08x-%08x-%08x/%08x-%08x-%08x', G.stamp, G.image, G.code.size, E.stamp, E.image, E.code.size)
+end
+local function code_reader(info) return function(o, n) return read_string(info.base + info.code.rva + o, n) end end
+
+-- caches: the places found, for this game build (looked at again, byte for byte, on every start). One file per part
+-- (SoloBuddyBunkers.cache: solo and host; .joined.cache: joined games; .units.cache: the units).
+local CACHE = LOGDIR and (LOGDIR .. '\\SoloBuddyBunkers') or nil
+local function cache_load(name)
   if not CACHE then return nil end
-  local f = io.open(CACHE, 'r'); if not f then return nil end
+  local f = io.open(CACHE .. name, 'r'); if not f then return nil end
   local s = f:read('*a'); f:close()
   local fn = loadstring('return ' .. s)
   if not fn then return nil end
@@ -301,27 +308,19 @@ local function cache_load()
   local ok, t = pcall(fn)
   return ok and type(t) == 'table' and t or nil
 end
-local function cache_save(key, sites, behs)
+local function cache_save(name, text)
   if not CACHE then return end
-  local f = io.open(CACHE, 'w'); if not f then return end
-  f:write(string.format('{key=%q,press={%d,%d},dispatch=%d,records=%d,units=%d,behs={%d,%d}}', key,
-    sites.press[1], sites.press[2], sites.dispatch, sites.records, sites.units, behs[1], behs[2]))
-  f:close()
+  local f = io.open(CACHE .. name, 'w'); if not f then return end
+  f:write(text); f:close()
 end
 
 local function resolve_layout()
   local t0 = os.clock()
-  local gmod = K32.SbGetModuleHandleA('game.dll')
-  local emod = K32.SbGetModuleHandleA(nil)
-  if gmod == nil or emod == nil then error('game modules not loaded', 0) end
-  local G, E = module_info(gmod), module_info(emod)
-  assert(G.code and E.code, 'no code section')
-  local key = string.format('%08x-%08x-%08x/%08x-%08x-%08x', G.stamp, G.image, G.code.size, E.stamp, E.image, E.code.size)
-  local function mem(info) return function(o, n) return read_string(info.base + info.code.rva + o, n) end end
+  local G, _, key = game_modules()
   local L
-  local cache = cache_load()
+  local cache = cache_load('.cache')
   if cache and cache.key == key and type(cache.press) == 'table' and type(cache.behs) == 'table' then
-    local ok, res = pcall(derive, G, E, cache, mem(G), mem(E), cache.behs)
+    local ok, res = pcall(derive, G, cache, code_reader(G), cache.behs)
     if ok then L = res; session.layout = 'cached for this game build (checked)' end
   end
   if not L then
@@ -329,18 +328,17 @@ local function resolve_layout()
     local text = code_text(G)
     sites.press = find_all(text, P.press, 4)
     if #sites.press ~= 2 then error('switch routines: found ' .. #sites.press .. ' (expected 2)', 0) end
-    sites.dispatch = find_once(text, P.dispatch, 'behaviour update')
-    sites.records = find_once(text, P.records, 'behaviour records')
-    local etext = code_text(E)
-    sites.units = find_once(etext, P.units, 'units')
-    L = derive(G, E, sites, function(o, n) return text:sub(o + 1, o + n) end, function(o, n) return etext:sub(o + 1, o + n) end)
-    text, etext = nil, nil
-    cache_save(key, sites, { L.right, L.left })
+    sites.dispatch = find_once(text, P.dispatch, 'behavior update')
+    sites.records = find_once(text, P.records, 'behavior records')
+    L = derive(G, sites, function(o, n) return text:sub(o + 1, o + n) end)
+    text = nil
+    cache_save('.cache', string.format('{key=%q,press={%d,%d},dispatch=%d,records=%d,behs={%d,%d}}', key,
+      sites.press[1], sites.press[2], sites.dispatch, sites.records, L.right, L.left))
     -- the cross-check with the September 2026 build
     local moved = {}
     local function cmp(name, v) if KNOWN[name] ~= v then moved[#moved + 1] = string.format('%s %x -> %x', name, KNOWN[name], v) end end
     cmp('press_right', L.switches[L.right].rva); cmp('press_left', L.switches[L.left].rva)
-    cmp('records', L.records - L.game); cmp('clock', L.clock - L.game); cmp('units', L.units - L.exe)
+    cmp('records', L.records - L.game); cmp('clock', L.clock - L.game)
     cmp('right', L.right); cmp('left', L.left); cmp('window_us', L.window_us)
     session.layout = #moved == 0 and 'found in the game code (same as the September 2026 build)'
       or ('found in the game code (new game build; moved: ' .. table.concat(moved, ', ') .. ')')
@@ -350,6 +348,31 @@ local function resolve_layout()
   return L
 end
 
+-- ((1.0.1 review) the units (helldivers2.exe): both parts need them (a switch's position), so they are found once, on
+-- their own, with their own cache and their own log line. Without them no switch can be paired, so the mod stays off.)
+local function derive_units(E, site, re)
+  local _, _, n = compile(P.units)
+  local ut = type(site) == 'number' and re(site, n)
+  if not ut or #ut ~= n or not match_at(ut, 0, P.units) then error('units changed', 0) end
+  return E.base + E.code.rva + site + 7 + si32(ut, 3)
+end
+local function resolve_units()
+  local t0 = os.clock()
+  local _, E, key = game_modules()
+  local c = cache_load('.units.cache')
+  if c and c.key == key then
+    local ok, at = pcall(derive_units, E, c.units, code_reader(E))
+    if ok then return at, string.format('cached for this game build (checked) (%.2f s)', os.clock() - t0) end
+  end
+  local etext = code_text(E)
+  local site = find_once(etext, P.units, 'units')
+  local at = derive_units(E, site, function(o, n) return etext:sub(o + 1, o + n) end)
+  cache_save('.units.cache', string.format('{key=%q,units=%d}', key, site))
+  return at, (at - E.base == KNOWN.units and 'found in the game code (same as the September 2026 build)'
+    or string.format('found in the game code (new game build; moved: units %x -> %x)', KNOWN.units, at - E.base))
+    .. string.format(' (%.2f s)', os.clock() - t0)
+end
+
 -- ======================================================================================================
 -- The switches
 -- ======================================================================================================
@@ -357,7 +380,6 @@ local L, broken, last_error
 local next_look = 0          -- frame of the next look for switches
 local enabled = true
 local switches = {}          -- [entity id] = { j, beh, obj, unit, state, seen, done }
-local doors = {}             -- (recorder builds: the bunker doors too)
 -- the switches' entity type hashes (low, high 32 bits) as the entity table stores them
 local T_RIGHT, T_LEFT = { 0x63CB630A, 0x574D0282 }, { 0x8F077BEC, 0x81A827B7 }
 local function is_switch_type(lo, hi) return (lo == T_RIGHT[1] and hi == T_RIGHT[2]) or (lo == T_LEFT[1] and hi == T_LEFT[2]) end
@@ -372,10 +394,15 @@ local function records_base()
   return recs, ents, om, count
 end
 
--- every switch in the mission, by its behaviour record. The records are read a block at a time (only their first
--- 4 bytes, the behaviour, matter), one block per frame, so a mission with many records never costs a big read at once.
+-- every switch in the mission, by its behavior record. The records are read a block at a time (only their first
+-- 4 bytes, the behavior, matter), one block per frame, so a mission with many records never costs a big read at once.
 local pass = nil             -- { next, count, recs, ents, seen }
 local function block(p)
+  -- ((1.0.1 review) the records can go away or move between two blocks of a look: each block reads only slots below
+  -- the game's current count, and if the arrays moved, the look starts over instead of reading the old ones)
+  local recs, ents, _, count = records_base()
+  if recs ~= p.recs or ents ~= p.ents then p.restart = true; p.next = p.count; return end
+  if count < p.count then p.count = count end
   local per = math.floor(65536 / L.stride)
   local first = p.next
   local n = math.min(per, p.count - first)
@@ -402,11 +429,13 @@ local function block(p)
     end
   end
 end
-local gone_hook              -- the recorder: told when a switch's record goes away
 local function finish(p)
   local n = 0
   for eid, s in pairs(switches) do
-    if not p.seen[eid] then switches[eid] = nil; if gone_hook then gone_hook(s) end else n = n + 1 end
+    if p.seen[eid] then n = n + 1
+    else
+      switches[eid] = nil
+    end
   end
   stats.switches = n
 end
@@ -420,6 +449,7 @@ end
 local function scan_step()
   if not pass then pass = start_pass(); if not pass then return true end end
   block(pass)
+  if pass.restart then pass = nil; return false end           -- (the arrays moved: the next frame starts over)
   if pass.next >= pass.count then finish(pass); pass = nil; return true end
   return false
 end
@@ -428,32 +458,46 @@ local function scan()
   local p = start_pass()
   if not p then return end
   while p.next < p.count do block(p) end
-  finish(p)
+  if not p.restart then finish(p) end
   pass = nil
 end
 
 -- a unit's position (helldivers2.exe unit table; the unit's world pose, root node)
-local UNITS_AT               -- the unit table's global (helldivers2.exe), from either path's start-up search
+local UNITS_AT               -- the unit table's global (helldivers2.exe), from the start-up search
+-- ((1.0.1 review) the unit object's layout is not in the code the mod searches: its own id at +8, its world poses at
+-- +0x88, the root pose's position at +48 (September 2026 build). A live unit that doesn't hold its own id, or has no
+-- readable position, means a game update moved them: said once in the log ('unit layout moved'))
+local UNIT = { id = 8, poses = 0x88, pos = 48 }
+local function unit_moved(what)
+  if session.unit_moved then return end
+  session.unit_moved = 'unit layout moved: ' .. what .. ' (switch positions can\'t be read, so no switch is pressed for you)'
+  event(session.unit_moved)
+end
 local function unit_position(unit)
   local reg = UNITS_AT and read_ptr(UNITS_AT); if not reg then return nil end
   local index, gen = bit.band(unit, 0x3FFFFF), bit.band(bit.rshift(unit, 22), 0xFF)
   local count = read_u32(reg + 0x98); if not count or index >= count then return nil end
   local gens = read_ptr(reg + 0xA0); if not gens or not fetch(gens + index, 1) or b8(0) ~= gen then return nil end
   local objs = read_ptr(reg + 0x88); local obj = objs and read_ptr(objs + 8 * index)
-  if not obj or read_u32(obj + 8) ~= unit then return nil end
-  local poses = read_ptr(obj + 0x88)
-  if not poses or not fetch(poses + 48, 12) then return nil end
+  if not obj then return nil end
+  if read_u32(obj + UNIT.id) ~= unit then return unit_moved(string.format('a unit does not hold its own id at +%d', UNIT.id)) end
+  local poses = read_ptr(obj + UNIT.poses)
+  if not poses or not fetch(poses + UNIT.pos, 12) then return unit_moved(string.format('a unit has no world poses at +0x%x', UNIT.poses)) end
   local x, y, z = bf32(0), bf32(4), bf32(8)
-  if not x or not y or not z or math.abs(x) > 1e5 or math.abs(y) > 1e5 or math.abs(z) > 1e5 then return nil end
+  if not x or not y or not z or math.abs(x) > 1e5 or math.abs(y) > 1e5 or math.abs(z) > 1e5 then
+    return unit_moved(string.format('a unit\'s position at +%d is not a position', UNIT.pos))
+  end
   return x, y, z
 end
 
--- the switch still is what we think (records move when other things in the mission go away)
+-- the switch still is what we think (records move when other things in the mission go away). Takes what
+-- records_base() returns: ((1.0.1 review) the switch's slot must be below the game's current count and inside the
+-- current array, so a record the game swap-removed (or an array it reallocated) is never pressed; both switches of a
+-- press are checked against the same base and count)
 local need_scan = false      -- look again after the walk through the switches (never during it)
-local function still(s)
+local function still(s, recs, ents, _, count)
+  if not (recs and ents) or s.j >= count or s.rec ~= recs + s.j * L.stride then return false end
   if not fetch(s.rec, 4) or b32(0) ~= s.beh then return false end
-  local _, ents = records_base()
-  if not ents then return false end
   return read_ptr(ents + s.j * 8) == s.obj and read_u32(s.obj + 8) == s.eid
 end
 
@@ -471,7 +515,11 @@ no_jit(press)
 
 local function side(beh) return beh == L.right and 'right' or 'left' end
 
-local function on_pressed(s)
+-- ((1.0.1 review) returns true when the press is to be tried again: the switches moved (or the other switch's state
+-- read as no switch state). watch() then keeps the switch as 'not seen pressed' (RETRY), so the next look, after the
+-- switches were looked for again, tries once more while the press is still fresh (FRESH_US limits the retries).
+-- `again`: this is such a retry (the log already said why))
+local function on_pressed(s, again)
   local px, py, pz = unit_position(s.unit)
   if not px then
     stats.skipped = stats.skipped + 1
@@ -493,25 +541,27 @@ local function on_pressed(s)
     event('a ' .. side(s.beh) .. string.format(' switch was pressed, but no %s switch is within %d m - left alone', side(want), PAIR_RANGE))
     return
   end
-  if not fetch(best.rec + REC_STATE, 4) then return end
+  -- ((1.0.1 review) both switches are checked first, against the same records base and count, so the state below is
+  -- read from a live record)
+  local recs, ents, om, count = records_base()
+  if not (still(best, recs, ents, om, count) and still(s, recs, ents, om, count)) then
+    if not again then event('the switches moved in memory before the press - looking again') end
+    need_scan = true
+    return true
+  end
+  if not fetch(best.rec + REC_STATE, 4) then need_scan = true; return true end
   local st = b32(0)
   if st == 4 then return end                 -- the other one is pressed already: nothing to do
   if st < 1 or st > 5 then                   -- not a state the game's switches use: something moved
-    stats.skipped = stats.skipped + 1
-    event(string.format('the other switch\'s state reads %d (not a switch state) - left alone', st))
+    if not again then event(string.format('the other switch\'s state reads %d (not a switch state) - looking again', st)) end
     need_scan = true
-    return
-  end
-  if not still(best) or not still(s) then
-    stats.skipped = stats.skipped + 1
-    event('the switches moved in memory before the press - left alone (looking again)')
-    need_scan = true
-    return
+    return true
   end
   press(best)
   stats.presses = stats.presses + 1
   local after = fetch(best.rec + REC_STATE, 4) and b32(0) or nil
   if after == 4 then stats.opened_for_you = stats.opened_for_you + 1 end
+  if after then best.state = after end       -- ((1.0.1 review) the mod's own press is not a new press to act on)
   event(string.format('you pressed a %s switch; pressed the %s switch %.1f m away for you (its state %d -> %s)',
     side(s.beh), side(best.beh), math.sqrt(bd), st, tostring(after)))
 end
@@ -542,15 +592,20 @@ local PJ = {
   -- the entity table (entity id -> row): its global, and its rows (24 bytes: type hash, entity id, unit)
   ents = '4C 8B 2D ?? ?? ?? ?? 33 FF 8B 0D ?? ?? ?? ?? 90 44 8B D7 49 81 C2',
   rows = '41 8B 41 04 4C 8D 04 40 49 8D 85 ?? ?? ?? ?? 4A 8D 04 C0',
+  -- ((1.0.1 review) the entity table's row count: the game's search for a free row (from its cursor, row + 8 = the
+  -- entity id, empty when it holds the 'no entity' id) wraps at the row count and gives up after that many rows)
+  cap = '8B D0 4C 8D 04 52 8B 15 ?? ?? ?? ?? 42 39 94 C1 ?? ?? ?? ?? 74 ?? FF C0 89 81 ?? ?? ?? ?? 3D ?? ?? ?? ?? 75 ??'
+     .. ' 44 89 91 ?? ?? ?? ?? 41 8B C2 41 FF C1 41 81 F9 ?? ?? ?? ?? 72 ??',
 }
-local KNOWN_J = { mgr = 0x33269A0, fn = 0x979570, req = 0x818, im = 0x3326D68, ents = 0x346BF98, rows = 0xF32F18 }
+local KNOWN_J = { mgr = 0x33269A0, fn = 0x979570, req = 0x818, im = 0x3326D68, ents = 0x346BF98, rows = 0xF32F18, rows_n = 2048 }
 local J_ORDER = { 'head', 'inst', 'call', 'count', 'im', 'ents', 'rows' }
+-- ((1.0.1 review) only used when the row count can't be found in the game code (the September 2026 build has 2048
+-- rows); the log then says so, and says once when a press names an entity outside the rows read)
 local ENT_ROWS = 2048
 local J, J_state = nil, 'not looked for yet'
 local JS = { requests = 0, sent = 0, skipped = 0, last = nil }
-local JCACHE = LOGDIR and (LOGDIR .. '\\SoloBuddyBunkers.joined.cache') or nil
 
-local function derive_join(G, E, sites, rg, re)
+local function derive_join(G, sites, rg)
   local crva = G.code.rva
   local function pat_len(p) local _, _, n = compile(p); return n end
   local t = {}
@@ -560,8 +615,6 @@ local function derive_join(G, E, sites, rg, re)
     if not s or #s ~= pat_len(PJ[k]) or not match_at(s, 0, PJ[k]) then error(k .. ' changed', 0) end
     t[k] = s
   end
-  local ut = type(sites.units) == 'number' and re(sites.units, pat_len(P.units))
-  if not ut or not match_at(ut, 0, P.units) then error('units changed', 0) end
   -- the three pieces of 'interact' belong together
   local d1, d2 = sites.inst - sites.head, sites.call - sites.inst
   if d1 <= 0 or d1 > 0x200 or d2 <= 0 or d2 > 0x400 then error('the interaction code changed (its pieces are apart)', 0) end
@@ -574,53 +627,44 @@ local function derive_join(G, E, sites, rg, re)
     im = g + crva + sites.im + 13 + si32(t.im, 9),
     im_size = su32(t.im, 28), im_mult = su32(t.im, 43), im_buckets = su32(t.im, 77), im_empty = su32(t.im, 84),
     ents = g + crva + sites.ents + 7 + si32(t.ents, 3), rows = su32(t.rows, 11),
-    units = E.base + E.code.rva + sites.units + 7 + si32(ut, 3),
   }
   j.head_n = math.max(j.count + 4, j.list + 8, j.insts + 8)
   if su32(t.call, 63) ~= j.req + 0x10 or j.stride < j.req + 0x18 or j.stride > 0x4000 or j.rows > 0x4000000 then
     error('layout not plausible', 0)
   end
+  -- the row count (optional): the same table (row + 8), the same count twice, the same cursor twice
+  local nc = pat_len(PJ.cap)
+  local ct = type(sites.cap) == 'number' and rg(sites.cap, nc)
+  if ct and #ct == nc and match_at(ct, 0, PJ.cap) and su32(ct, 16) == j.rows + 8 and su32(ct, 31) == su32(ct, 53)
+    and su32(ct, 26) == su32(ct, 40) and su32(ct, 31) > 0 and su32(ct, 31) <= 0x10000 then
+    j.rows_n, j.rows_found = su32(ct, 31), true
+  else
+    j.rows_n, j.rows_found = ENT_ROWS, false
+  end
   return j
 end
 
 local function resolve_join()
-  local gmod, emod = K32.SbGetModuleHandleA('game.dll'), K32.SbGetModuleHandleA(nil)
-  if gmod == nil or emod == nil then error('game modules not loaded', 0) end
-  local G, E = module_info(gmod), module_info(emod)
-  if not (G.code and E.code) then error('no code section', 0) end
-  local key = string.format('%08x-%08x-%08x/%08x-%08x-%08x', G.stamp, G.image, G.code.size, E.stamp, E.image, E.code.size)
-  local function mem(info) return function(o, n) return read_string(info.base + info.code.rva + o, n) end end
-  if JCACHE then
-    local f = io.open(JCACHE, 'r')
-    if f then
-      local s = f:read('*a'); f:close()
-      local fn = loadstring('return ' .. s)
-      if fn then
-        setfenv(fn, {})
-        local ok, c = pcall(fn)
-        if ok and type(c) == 'table' and c.key == key then
-          local ok2, j = pcall(derive_join, G, E, c, mem(G), mem(E))
-          if ok2 then return j, 'cached for this game build (checked)' end
-        end
-      end
-    end
+  local G, _, key = game_modules()
+  local c = cache_load('.joined.cache')
+  if c and c.key == key then
+    local ok, j = pcall(derive_join, G, c, code_reader(G))
+    if ok and (j.rows_found or c.cap == nil) then return j, 'cached for this game build (checked)' end
   end
-  local text, etext = code_text(G), code_text(E)
+  local text = code_text(G)
   local sites = {}
   for _, k in ipairs(J_ORDER) do sites[k] = find_once(text, PJ[k], k) end
-  sites.units = find_once(etext, P.units, 'units')
-  local j = derive_join(G, E, sites, function(o, n) return text:sub(o + 1, o + n) end, function(o, n) return etext:sub(o + 1, o + n) end)
-  if JCACHE then
-    local f = io.open(JCACHE, 'w')
-    if f then
-      local parts = { string.format('key=%q', key), 'units=' .. sites.units }
-      for _, k in ipairs(J_ORDER) do parts[#parts + 1] = k .. '=' .. sites[k] end
-      f:write('{', table.concat(parts, ','), '}'); f:close()
-    end
-  end
+  local cap = find_all(text, PJ.cap, 2)
+  if #cap == 1 then sites.cap = cap[1] end
+  local j = derive_join(G, sites, function(o, n) return text:sub(o + 1, o + n) end)
+  local parts = { string.format('key=%q', key) }
+  for _, k in ipairs(J_ORDER) do parts[#parts + 1] = k .. '=' .. sites[k] end
+  if j.rows_found then parts[#parts + 1] = 'cap=' .. sites.cap end
+  cache_save('.joined.cache', '{' .. table.concat(parts, ',') .. '}')
   local moved = {}
   local function cmp(name, v) if KNOWN_J[name] ~= v then moved[#moved + 1] = string.format('%s %x -> %x', name, KNOWN_J[name], v) end end
   cmp('mgr', j.mgr - G.base); cmp('fn', j.fn - G.base); cmp('req', j.req); cmp('im', j.im - G.base); cmp('ents', j.ents - G.base); cmp('rows', j.rows)
+  if j.rows_found then cmp('rows_n', j.rows_n) end
   return j, #moved == 0 and 'found in the game code (same as the September 2026 build)'
     or ('found in the game code (new game build; moved: ' .. table.concat(moved, ', ') .. ')')
 end
@@ -647,20 +691,26 @@ local function interactable(eid)
   return false
 end
 
--- the bunker switches in the entity table: { [entity id] = { side, unit } }
-local function entity_switches()
-  local em = read_ptr(J.ents)
-  if not em or not fetch(em + J.rows, ENT_ROWS * 24) then return nil end
-  local out = {}
-  for i = 0, ENT_ROWS - 1 do
-    local o = i * 24
-    local lo = b32(o)
-    if lo == T_RIGHT[1] or lo == T_LEFT[1] then
-      local hi, e, unit = b32(o + 4), b32(o + 8), b32(o + 12)
-      if is_switch_type(lo, hi) and e ~= 0 and unit ~= 0 then out[e] = { side = lo == T_RIGHT[1] and 'right' or 'left', unit = unit } end
+-- the bunker switches in the entity table: { [entity id] = { side, unit } }, and whether `target` (an entity id) is in
+-- the rows read. ((1.0.1 review) all of the table's rows (J.rows_n), read in blocks of at most 64 KB)
+local ROWS_PER = math.floor(65536 / 24)
+local function entity_switches(target)
+  local em = read_ptr(J.ents); if not em then return nil end
+  local out, has = {}, false
+  for first = 0, J.rows_n - 1, ROWS_PER do
+    local n = math.min(ROWS_PER, J.rows_n - first)
+    if not fetch(em + J.rows + first * 24, n * 24) then return nil end
+    for i = 0, n - 1 do
+      local o = i * 24
+      local lo = b32(o)
+      if lo == T_RIGHT[1] or lo == T_LEFT[1] then
+        local hi, e, unit = b32(o + 4), b32(o + 8), b32(o + 12)
+        if is_switch_type(lo, hi) and e ~= 0 and unit ~= 0 then out[e] = { side = lo == T_RIGHT[1] and 'right' or 'left', unit = unit } end
+      end
+      if target and not has and b32(o + 8) == target then has = true end
     end
   end
-  return out
+  return out, has
 end
 
 local REQ = ffi.typeof('void *(*)(void *, void *, uint32_t, uint32_t, uint32_t)')
@@ -670,9 +720,17 @@ local JW = { mgr = nil, n = nil, list = nil, insts = nil, mine = {}, next_mine =
 local seen_req = {}          -- [instance] = the entity id of its pending request (so each press is acted on once)
 local function on_request(k, target, which, info)
   JS.requests = JS.requests + 1
-  local sw = entity_switches()
+  local sw, has = entity_switches(target)
   local s = sw and sw[target]
-  if not s then return end                   -- not a bunker switch (a door, a terminal, a pickup...)
+  if not s then                              -- not a bunker switch (a door, a terminal, a pickup...)
+    if sw and not has and not JS.unchecked then
+      -- ((1.0.1 review) said once: a press on an entity outside the rows read, so its type couldn't be checked)
+      JS.unchecked = true
+      event(string.format('joined game: a press on entity %x could not be checked (it is not in the %d entity rows read%s) - left alone',
+        target, J.rows_n, J.rows_found and '' or '; the table\'s size was not found in the game code'))
+    end
+    return
+  end
   local function skip(why)
     JS.skipped = JS.skipped + 1
     event('joined game: you pressed a ' .. s.side .. ' switch, ' .. why .. ' - left alone')
@@ -759,23 +817,30 @@ local function watch_join(f)
   end
 end
 
-local rec_count = 0           -- (recorder builds: lines in the record log)
 
+local RETRY = -1              -- a switch's state while its press is to be tried again (never a value read from the game)
 local function watch()
   for _, s in pairs(switches) do
     if fetch(s.rec + REC_STATE, 4) then
-      local st = b32(0)
-      if st == 4 and s.state ~= 4 then
+      local st, was = b32(0), s.state
+      local retry, acted = nil, false
+      if st == 4 and was ~= 4 then
         -- a new press? (press time within FRESH_US of the game clock)
         local pt = read_u64(s.rec + L.press_time)
         local clk = read_ptr(L.clock); local t = clk and read_u64(clk + 0x18)
-        if s.state ~= nil and pt and t and t >= pt and t - pt <= FRESH_US then
-          if enabled then on_pressed(s) end
-        elseif TESTER and s.state == nil then
+        if was ~= nil and pt and t and t >= pt and t - pt <= FRESH_US then
+          if enabled then acted = true; retry = on_pressed(s, was == RETRY) end
+        elseif TESTER and was == nil then
           note('first seen pressed', 'a switch was already pressed when first seen - left alone')
         end
       end
-      s.state = st
+      if was == RETRY and not acted then       -- ((1.0.1 review) a retried press that ran out of time
+        stats.skipped = stats.skipped + 1
+        event('a ' .. side(s.beh) .. ' switch was pressed, but the switches could not be checked in time - left alone')
+      end
+      -- ((1.0.1 review) a press to try again is kept as 'not seen pressed': the next look sees the 4 again. RETRY (-1)
+      -- rather than 0: a state word can read 0, and that must not count as a retry)
+      s.state = retry and RETRY or st
     end
   end
   if need_scan then need_scan = false; scan() end
@@ -812,16 +877,39 @@ end
 local frame, ready = 0, not V19
 local host_off               -- why the solo/host part is off (a game update changed its code), or nil
 local started = false        -- the start-up search is done (both parts)
+-- ((1.0.1 review) the status line is rebuilt only when what it says changes: which part acts, and the toggle. When
+-- only the joined-game part was found, it acts in every game (it can't tell solo and hosting from joined), so the
+-- status doesn't call that a joined game)
+local status_key
+local function set_status(kind)              -- 1: your game runs the switches, 2: the joined-game part acts, 3: neither
+  local key = kind * 2 + (enabled and 1 or 0)
+  if key == status_key then return end
+  status_key = key
+  local st
+  if not enabled then st = 'off (options menu)'
+  elseif kind == 1 then st = 'on (your game runs the switches: solo or hosting)'
+  elseif kind == 2 then st = L and 'on (joined game: your presses go to the host)'
+    or 'on (buddy bunkers nearby: the joined-game part sends your presses, in any game)'
+  else st = 'on (no buddy bunkers nearby)' end
+  if enabled and host_off then st = st .. '; solo and host part: off' end
+  if enabled and not J then st = st .. '; joined games: off' end
+  SB.status = st
+end
 local function tick()
   frame = frame + 1
   if not menu_linked and frame % 60 == 0 and frame < 3600 then menu_linked = link_menu() end
   if not ready then SB.status = 'waiting for start-up'; return end
   if not started then
     started = true
-    -- the two parts are found on their own: if a game update breaks one, the other keeps working
+    -- the two parts are found on their own: if a game update breaks one, the other keeps working. Both need the
+    -- units (a switch's position), found once on their own ((1.0.1 review))
+    local oku, u, uhow = pcall(resolve_units)
+    if oku then UNITS_AT, session.units = u, uhow
+    else session.units = 'off - could not find what it needs in the game code: ' .. tostring(u) end
+    event('game code (units): ' .. session.units)
     local ok, res = pcall(resolve_layout)
     if ok then
-      L, UNITS_AT = res, res.units
+      L = res
       event('game code (solo and host): ' .. session.layout .. string.format(' (%.2f s)', session.scan_seconds))
     else
       host_off = 'could not find what it needs in the game code: ' .. tostring(res)
@@ -831,10 +919,11 @@ local function tick()
     local okj, j, how = pcall(resolve_join)
     if okj then
       J, J_state = j, how .. string.format(' (%.2f s)', os.clock() - t0)
-      UNITS_AT = UNITS_AT or j.units
+      if not j.rows_found then event('joined games: the entity table\'s size was not found in the game code (reading its first ' .. j.rows_n .. ' rows)') end
     else J_state = 'off - could not find what it needs in the game code: ' .. tostring(j) end
     event('game code (joined games): ' .. J_state)
     TEXTS = {}; shrink_buf()                 -- the code copies are not needed any more
+    if not UNITS_AT then broken, last_error, SB.status = true, 'switch positions (units): ' .. session.units, 'off'; return end
     if not L and not J then broken, last_error, SB.status = true, host_off, 'off'; return end
   end
   if L and (pass or frame >= next_look) then
@@ -846,20 +935,18 @@ local function tick()
     next_look = frame + SCAN_EVERY
     joined_look()
   end
-  if next(switches) == nil and not (RECORDER and next(doors)) then
-    if J and JW.active and not RECORDER then
+  local idle = next(switches) == nil
+  if idle then
+    if J and JW.active then
       watch_join(frame)                      -- a joined game: your presses go to the host
-      SB.status = enabled and 'on (joined game: your presses go to the host)' or 'off (options menu)'
+      set_status(2)
     else
-      SB.status = enabled and 'on (no buddy bunkers nearby)' or 'off (options menu)'
+      set_status(3)
     end
-    if host_off and enabled then SB.status = SB.status .. '; solo and host games: off' end
-    if not J and enabled then SB.status = SB.status .. '; joined games: off' end
     return
   end
-  SB.status = enabled and 'on (your game runs the switches: solo or hosting)' or 'off (options menu)'
-  if not J and enabled then SB.status = SB.status .. '; joined games: off' end
-  if RECORDER or frame % WATCH_EVERY == 0 then watch() end      -- the recorder looks every frame
+  set_status(1)
+  if frame % WATCH_EVERY == 0 then watch() end
 end
 
 -- ======================================================================================================
@@ -873,9 +960,12 @@ local function write_log()
   f:write('Solo Buddy Bunkers ', VERSION, '  (started ', session.started, ', written ', os.date('%H:%M:%S'), ')\n')
   f:write('status: ', SB.status, broken and (' - ' .. tostring(last_error)) or '', '\n')
   if host_off then f:write('solo and host games: off - ', host_off, '\n') end
+  f:write('game code (units): ', tostring(session.units), '\n')
+  if session.unit_moved then f:write(session.unit_moved, '\n') end
   f:write('Bingus Shared Loader: ', V19 and 'v19 or newer' or 'older than v19 (needs v19 or newer; using the old start-up)', '\n')
   if L then f:write('game code (solo and host): ', tostring(session.layout), string.format(' (%.2f s)', session.scan_seconds or 0), '\n') end
   f:write('game code (joined games): ', J_state, '\n')
+  if J and not J.rows_found then f:write('joined games: the entity table\'s size was not found in the game code (reading its first ', J.rows_n, ' rows)\n') end
   if session.window then f:write('the game\'s window for the second switch: ', session.window, '\n') end
   f:write('options menu: ', menu_state, '\n')
   if T.n > 0 then f:write(string.format('cost per frame: average %.4f ms, highest %.3f ms\n', T.sum / T.n, T.max)) end
@@ -890,7 +980,7 @@ local function write_log()
   if TESTER then
     f:write(string.format('looks for switches %d, game reads %d (failed %d)\n', stats.scans, stats.reads, stats.read_fails))
     if L then
-      f:write(string.format('switch behaviours: right %d, left %d; record stride %d; press time at record + %d\n',
+      f:write(string.format('switch behaviors: right %d, left %d; record stride %d; press time at record + %d\n',
         L.right, L.left, L.stride, L.press_time))
       for eid, s in pairs(switches) do
         local x, y, z = unit_position(s.unit)
@@ -934,7 +1024,7 @@ rawset(_G, 'update', function(...)
   local now = os.clock()
   if now >= next_log then
     next_log = now + 10
-    local sig = SB.status .. #session.events .. ':' .. stats.presses .. ':' .. stats.switches .. ':' .. tostring(session.events[#session.events]) .. ':' .. rec_count .. ':' .. (JS.sent + JS.skipped)
+    local sig = SB.status .. #session.events .. ':' .. stats.presses .. ':' .. stats.switches .. ':' .. tostring(session.events[#session.events]) .. ':' .. (JS.sent + JS.skipped)
     if sig ~= logged then logged = sig; pcall(write_log) end
   end
   return game_update(...)

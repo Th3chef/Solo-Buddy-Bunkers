@@ -7,6 +7,7 @@ A Bingus Shared Loader Lua mod: one addon, `lua/solo_buddy_bunkers.lua`.
     build.py        builds the mod zip (Python 3 + Pillow):
                       python3 build.py out              -> out/Solo-Buddy-Bunkers-<ver>.zip (the release)
                       python3 build.py out --tester     -> the Tester build (extra details in the log)
+                      python3 build.py out --test N     -> numbered test build N (its log goes to Logs\test)
     patch_writer.py writes the patch archive
     fonts/          Anton (SIL Open Font License), for the icon of numbered test builds
     artwork/        the release art:
@@ -17,5 +18,6 @@ A Bingus Shared Loader Lua mod: one addon, `lua/solo_buddy_bunkers.lua`.
                       thumbnail.png   the page art (square); fonts/ (SIL Open Font License)
                       icon.png        the Arsenal icon build.py puts in the zip (the 1.0.0 art)
 
-Run them from this folder. The release build is deterministic apart from the zip's file dates: the files inside match
-the release byte for byte.
+Run them from this folder. The build is deterministic: the same sources give the same zip byte for byte (with the same
+Python and zlib), and the files inside match the release. build.py only removes its own outputs from the output folder
+and refuses the source folder or one of its parents.

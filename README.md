@@ -4,7 +4,7 @@
 
 *Press one switch of a two-person bunker and the other one is pressed for you.*
 
-**Download:** `Solo-Buddy-Bunkers-1.0.0.zip` from the [latest release](https://github.com/Th3chef/Solo-Buddy-Bunkers/releases/latest) (not the source code). Needs [Bingus Shared Loader](https://www.nexusmods.com/helldivers2/mods/16292) v19 or newer.
+**Download:** `Solo-Buddy-Bunkers-1.0.1.zip` from the [latest release](https://github.com/Th3chef/Solo-Buddy-Bunkers/releases/latest) (not the source code). Needs [Bingus Shared Loader](https://www.nexusmods.com/helldivers2/mods/16292) v19 or newer.
 
 Buddy bunkers are the two-person bunkers with a switch on each side of the door: both switches have to be pressed within a few seconds of each other to open the door. With this mod you press one switch, the other switch of the same bunker is pressed for you, and the door opens. No more running back and forth, and no more waiting for a squadmate to come over.
 
@@ -28,7 +28,7 @@ Optional: [Mod Options Menu](https://www.nexusmods.com/helldivers2/mods/16625) f
 ## Install / update
 
 1. Install [Bingus Shared Loader](https://www.nexusmods.com/helldivers2/mods/16292) v19 or newer if you don't have it.
-2. Mod manager (Arsenal / HD2 Mod Manager): add `Solo-Buddy-Bunkers-1.0.0.zip` and enable it, then **Purge** and **Deploy**.
+2. Mod manager (Arsenal / HD2 Mod Manager): add `Solo-Buddy-Bunkers-1.0.1.zip` and enable it, then **Purge** and **Deploy**.
 
 ## Uninstall
 
@@ -39,7 +39,7 @@ Disable it in your mod manager, then Purge and Deploy. Its log and cache files s
 - A Bingus Shared Loader script: it doesn't replace any game files, so it works alongside other mods.
 - Works solo, when you host, and when you join someone else's game. Nobody else needs the mod.
 - It only acts when a buddy bunker switch is pressed, and only presses that bunker's other switch (the nearest switch of the other side, a few meters away).
-- Patch-proof by design: it finds what it needs in the game's code by itself after a game update. The solo/host part and the joined-game part are found separately, so if an update breaks one, the other keeps working. If something can't be found, that part turns itself off and says so in its log, rather than guessing.
+- Patch-proof by design: it finds what it needs in the game's code by itself after a game update. The solo/host part and the joined-game part are found separately, so if an update breaks one, the other keeps working. Both parts share one lookup, the units (where each switch is in the world): it is found once, on its own, and if an update breaks it, the mod turns itself off and its log says so. If something can't be found, that part turns itself off and says so in its log, rather than guessing.
 - Made and tested on the October 2026 game version.
 
 ## Known limitations
