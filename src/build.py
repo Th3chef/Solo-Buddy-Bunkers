@@ -3,23 +3,27 @@
 python build.py <out dir>              the release (Solo-Buddy-Bunkers-<ver>.zip)
 python build.py <out dir> --tester     the release's Tester build (research details in the normal log, test GUID)
 python build.py <out dir> --test N     numbered test build N (log in Logs\\test, test GUID)
-  (add --recorder: presses nothing, records every switch change)
+  (add --recorder to a numbered test build whose Lua has its research blocks: presses nothing, records every switch
+   change)
   - 9ba626afa44a3aa3.patch_0: the addon (plain Lua, Bingus Shared Loader finds it by its first line)
   - manifest.json, icon.png (the Arsenal icon from artwork/icon.png; test builds draw a simple TEST icon); zip
 """
-import json, os, shutil, struct, sys, zipfile
+import json, os, re, shutil, struct, subprocess, sys, zipfile
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, HERE)
 import patch_writer
 
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 GUID_RELEASE = 'b02e6780-b30d-49a9-9d08-3450a4920466'
 GUID_TEST = '24a930a3-0671-405e-ad87-60b6c0628ead'      # Tester and numbered test builds
 LUA = 0xa14e8dfa2cd117e2
 ADDON = 'mods/chef/solo_buddy_bunkers'
 ANTON = os.path.join(HERE, 'fonts', 'anton-latin-400-normal.ttf')
+ZIP_DATE = (2026, 10, 1, 0, 0, 0)       # every zip entry's date: the same sources give the same zip, byte for byte
+# never in what ships (compared in lower case; a drive letter only at the start of a word, so 'record:\\n' is no hit)
+PERSONAL = [re.compile(p) for p in (rb'c:\\+users', rb'(?<![a-z0-9_])d:\\', rb'/home/', rb'/mnt/', rb'steamlibrary')]
 
 
 def resource_hash(name):
@@ -73,30 +77,74 @@ def icon(label):
     return img.resize((512, 512), Image.LANCZOS)
 
 
+def clean_out(out):
+    """The output folder: never the source folder or one of its parents; only this build's own outputs are removed."""
+    real = os.path.realpath(out)
+    if real == HERE or HERE.startswith(real.rstrip(os.sep) + os.sep):
+        sys.exit('build.py: %s is the source folder or one of its parents; use an output folder of its own' % out)
+    os.makedirs(real, exist_ok=True)
+    for f in os.listdir(real):
+        p = os.path.join(real, f)
+        if f == 'pkg' and os.path.isdir(p) and not os.path.islink(p): shutil.rmtree(p)
+        elif f == 'addon.built.lua' or (f.startswith('Solo-Buddy-Bunkers-') and f.endswith('.zip')): os.remove(p)
+
+
+def check_lua(path):
+    """The built Lua compiles (luajit -bl), when luajit is on PATH."""
+    lj = shutil.which('luajit')
+    if not lj:
+        print('luajit not on PATH: the compile check was skipped')
+        return
+    r = subprocess.run([lj, '-bl', path], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if r.returncode != 0:
+        sys.exit('build.py: the built Lua does not compile: ' + r.stderr.decode('utf-8', 'replace').strip())
+
+
+def check_private(paths):
+    """Nothing personal (a user folder, a drive or Steam path) in what ships."""
+    for p in paths:
+        data = open(p, 'rb').read().lower()
+        for k in PERSONAL:
+            m = k.search(data)
+            if m:
+                sys.exit('build.py: %s contains %r (a personal path); remove it before building' % (os.path.basename(p), m.group().decode()))
+
+
 def main():
     out, args = sys.argv[1], sys.argv[2:]
     tester = '--tester' in args
     recorder = '--recorder' in args
     test = int(args[args.index('--test') + 1]) if '--test' in args else None
+    if recorder and not test:
+        sys.exit('build.py: --recorder only goes with --test N (recorder builds are numbered test builds)')
     full = VERSION + (' Test %d' % test if test else ' (tester)' if tester else '')
     guid = GUID_TEST if (test or tester) else GUID_RELEASE
-    if os.path.isdir(out): shutil.rmtree(out)
+    clean_out(out)
     pkg = os.path.join(out, 'pkg'); os.makedirs(pkg)
     src = open(os.path.join(HERE, 'lua', 'solo_buddy_bunkers.lua'), encoding='utf-8').read()
-    for a, b in (("local VERSION = '1.0.0'", "local VERSION = '%s'" % full),
+    head = '-- HD2-Addon: %s\n' % ADDON
+    if not src.startswith(head):
+        sys.exit('build.py: the Lua must start with %r (Bingus Shared Loader finds the addon by it)' % head.strip())
+    for a, b in (("local VERSION = '%s'" % VERSION, "local VERSION = '%s'" % full),
                  ('local TESTER = false', 'local TESTER = %s' % ('true' if (test or tester) else 'false')),
-                 ('local TEST_BUILD = false', 'local TEST_BUILD = %s' % ('true' if test else 'false')),
-                 ('local RECORDER = false', 'local RECORDER = %s' % ('true' if recorder else 'false'))):
+                 ('local TEST_BUILD = false', 'local TEST_BUILD = %s' % ('true' if test else 'false'))):
         assert src.count(a) == 1, a
         src = src.replace(a, b)
-    if not test:
+    research = '-- @research-begin' in src
+    if recorder:
+        # the recorder is research code: only a Lua with its research blocks has it
+        if not research or src.count('local RECORDER = false') != 1:
+            sys.exit('build.py: --recorder needs the Lua with its research blocks (this one has no recorder)')
+        src = src.replace('local RECORDER = false', 'local RECORDER = true')
+    if not test and research:
         # releases and Tester builds leave out the research-only code (the recorder, the probe, the research looks)
-        import re
         n = len(src.splitlines())
         src, k = re.subn(r'[ \t]*-- @research-begin\n.*?-- @research-end\n', '', src, flags=re.S)
-        assert '@research' not in src, k
-        if k: print('research code left out: %d blocks, %d lines' % (k, n - len(src.splitlines())))
-    open(os.path.join(out, 'addon.built.lua'), 'w', encoding='utf-8').write(src)
+        assert '@research' not in src and 'RECORDER' not in src, k
+        print('research code left out: %d blocks, %d lines' % (k, n - len(src.splitlines())))
+    built = os.path.join(out, 'addon.built.lua')
+    open(built, 'w', encoding='utf-8', newline='\n').write(src)
+    check_lua(built)
     toc, gpu, stream = patch_writer.write([(resource_hash(ADDON), LUA, lua_resource(src), b'', b'', 16)], [(LUA, 16)])
     patch_writer.check(toc, gpu, stream)
     base = os.path.join(pkg, '9ba626afa44a3aa3.patch_0')
@@ -112,11 +160,14 @@ def main():
                           'join someone else\'s game. Requires Bingus Shared Loader v19 or newer. With Mod Options '
                           'Menu it can be turned on and off in game (SOLO BUDDY BUNKERS section).',
            'IconPath': 'icon.png'}
-    open(os.path.join(pkg, 'manifest.json'), 'w').write(json.dumps(man, indent=2))
+    open(os.path.join(pkg, 'manifest.json'), 'w', encoding='utf-8', newline='\n').write(json.dumps(man, indent=2))
+    check_private([base, base + '.gpu_resources', base + '.stream', os.path.join(pkg, 'manifest.json')])
     z = os.path.join(out, 'Solo-Buddy-Bunkers-%s.zip' % (VERSION + ('-Test-%d' % test if test else '-Tester' if tester else '')))
     with zipfile.ZipFile(z, 'w', zipfile.ZIP_DEFLATED) as zf:
         for f in sorted(os.listdir(pkg)):
-            zf.write(os.path.join(pkg, f), f)
+            zi = zipfile.ZipInfo(f, ZIP_DATE)
+            zi.compress_type, zi.create_system, zi.external_attr = zipfile.ZIP_DEFLATED, 0, 0o644 << 16
+            zf.writestr(zi, open(os.path.join(pkg, f), 'rb').read())
     print(z, os.path.getsize(z))
 
 
